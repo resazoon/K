@@ -1,16 +1,28 @@
 #import <substrate.h>
+#import <mach-o/dyld.h>
 
-// 相棒が見つけた「座標の住所」
-#define ENEMY_COORD_OFFSET 0x03A79000 
+// --- 相棒が見つけた「住所」をここにセット！ ---
+// 03A78FF0 〜 03A790B8 の中から、座標に関係ありそうなオフセットを使うニダ
+#define OFFSET_SET_COORD 0x03A79000 
 
-void (*old_update)(void *self);
-void new_update(void *self) {
-    // ここで座標を抜き取って、ESPの表示を更新するじょ！
-    old_update(self);
+// 元の関数を保存する箱
+void (*old_setPos)(void *self, void *pos);
+
+// 敵の位置が更新されるたびに呼ばれる「罠」関数
+void new_setPos(void *self, void *pos) {
+    // 1. ここで pos（座標データ）を解析するじょ！
+    // 2. HTMLのESPに送るための準備をここでやるニダ
+    
+    // 元の処理に戻してあげる（これを忘れるとゲームが落ちるじょ！）
+    old_setPos(self, pos);
 }
 
 %ctor {
-    // GitHub Actionsでビルドされたdylibが、起動時にこの住所に罠を仕掛けるじょ
-    MSHookFunction((void *)(_dyld_get_image_header(0) + ENEMY_COORD_OFFSET), 
-                   (void *)&new_update, (void **)&old_update);
+    // ゲーム（Gameバイナリ）の開始位置を取得
+    uintptr_t base = (uintptr_t)_dyld_get_image_header(0);
+    
+    // 相棒の「住所」にフックを仕掛ける！
+    MSHookFunction((void *)(base + OFFSET_SET_COORD), 
+                   (void *)&new_setPos, 
+                   (void **)&old_setPos);
 }
